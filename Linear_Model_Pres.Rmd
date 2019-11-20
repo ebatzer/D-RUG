@@ -1,0 +1,369 @@
+---
+title: "Basics of Linear Modeling"
+author: "Evan Batzer"
+date: "October 17, 2019"
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(ggplot2);library(gridExtra); library(dplyr)
+mtcars <- mtcars %>% select(mpg, disp, hp, wt, drat)
+```
+
+<style type="text/css">
+code.r{ /* Code block */
+    font-size: 22px;
+    font-weight: bold;
+}
+pre { /* Code block - determines code spacing between lines */
+    font-size: 22px;
+    font-weight: bold;
+}
+</style>
+
+## What is a *linear model*?
+
+A statistical model where a *response* is estimated as a *linear function* of predictors.
+
+**Linear operations include:** 
+
+- Addition (+)
+- Multiplication (*)
+
+**Simplest case: **
+
+- $y = mx + b$ (grade school)
+- $Y_i = \beta_0 + \beta_1 X_i + \epsilon_i$ (grown-up)
+
+An observation (i) has a mean value that is estimated by an intercept coefficient ($\beta_0$) and a slope coefficient ($\beta_1$) multiplied by a predictor ($X$) with some random error ($\epsilon_i$)
+
+## Variations
+
+**Case 1:**
+Classic linear model | lm()
+
+- Observations (Y's) come from a normal distribution with constant variance
+- Predictors are fixed (not random)
+
+**Case 2:**
+Random / Mixed Effects Model | lmer(), lme()
+
+- Observations (Y's) come from a normal distribution with constant variance
+- Predictors can be either fixed OR random
+
+**Case 3:**
+Generalized Linear Model | glm(), glmer()
+
+- Observations (Y's) can come from a distribution whose *mean* is estimated by a linear function of predictors, associated with a *link* function
+- Poisson regression, logistic regression
+
+## 
+
+Despite differences in linear model types, **analysis steps** and **model formulation** are remarkably consistent
+
+## Basic roadmap
+
+1. Define question
+2. Collect and clean data
+3. Exploring predictors
+4. Fitting model objects
+5. Model diagnostics
+6. Inference and visualization
+
+## 1. Define your question 
+
+Have a defined question (or hypothesis) when starting analysis can help guide your modeling approach.
+
+- What predictor variables are of interest?
+- Am I looking to test the fit of a particular model? 
+- Do I want to compare many potential models?
+- Am I interested in finding the combination of variables that best predicts a response?
+
+**E.g. What variables best predict the fuel economy (mpg) of a car?**
+
+*Keep this question in mind at all times going forward*
+
+## 2. Collect and clean data
+
+Will not cover this in much detail today, but know that:
+
+**Data must be in a consistent format for many modeling packages**
+
+- Rows correspond to unique observations 
+- Columns correspond to variables
+
+```{r}
+head(mtcars)
+```
+
+## 3. Exploring predictors
+
+**How are my predictors distributed?**
+
+- Very skewed predictors can lead to outliers or non-linear relationships
+- Highly correlated predictors will increase variance
+
+Inspect predictors with hist() or ggplot2::geom_histogram(), transform if needed
+
+```{r, fig.height=3}
+p1 <- ggplot(mtcars)+ 
+  geom_histogram(aes(x = hp), bins = 15,
+                 fill = "coral", color = "black") +
+  ggtitle("Histogram of Horsepower")
+
+p2 <- ggplot(mtcars)+ 
+  geom_histogram(aes(x = log(hp)), bins = 15,
+                 fill = "coral", color = "black") +
+   ggtitle("Histogram of Log(Horsepower)")
+
+grid.arrange(p1, p2, nrow = 1)
+```
+
+## pairs() shows bivariate scatterplots
+
+```{r, echo = TRUE}
+pairs(mtcars %>% select(disp, hp, wt, drat), cex = 2)
+```
+
+## corrplot() returns pretty correlation diagrams ###
+
+```{r, echo = TRUE, fig.height = 4}
+corrplot::corrplot.mixed(cor(mtcars %>% select(disp, hp, wt, drat)))
+```
+
+## Variance inflation factor (VIF)
+
+**Variance inflation factor** (VIF) can be used to determine how highly correlated predictors affect one another in regression.
+
+Simply, if two predictors are highly correlated, it can be hard to determine which variable has an effect on a relationship. High VIF values make large uncertainty in the effects of a predictor.
+
+```{r, echo = TRUE}
+diag(solve(cor(mtcars %>% select(disp, hp, wt, drat))))
+```
+
+Here, a car's horsepower, weight, and displacement are all correlated with one another. If gas mileage is poor, which one of these is the culprit? 
+
+## 4. Fitting Model Objects
+
+**Function calls in all major model-fitting packages take the form:**
+```{r}
+cat("lm(Response ~ Predictors)")
+```
+
+By design, the intercept coefficient, $\beta_0$ is assumed to be added.
+
+**In a practical example:**
+```{r}
+cat("lm(mpg ~ hp, data = mtcars)")
+```
+
+Translates to:
+$$Y = \beta_0 + \beta_1 * Horsepower + \epsilon$$
+## Variable types
+
+Incorporating **continuous variables** into R 
+
+
+## Model Notation
+
+**Removing the intercept**
+
+You'll have to specify this manually with "0 +" or "-1"
+```{r, echo = TRUE}
+coef(lm(mpg ~ hp, data = mtcars))
+coef(lm(mpg ~ 0 + hp, data = mtcars))
+```
+
+\br
+
+## Model Notation (Continued) 
+
+**Adding terms**
+
+The "+" operator
+
+```{r, echo = TRUE}
+coef(lm(mpg ~ hp + wt + disp + drat, data = mtcars))
+```
+
+## Model Notation (Continued) 
+
+**Interaction terms**
+
+Interaction terms are designated through ":"
+
+```{r, echo = TRUE}
+coef(lm(mpg ~ hp:wt, data = mtcars))
+```
+
+Including the "*" operator returns first-order terms and their interactions
+
+```{r, echo = TRUE}
+coef(lm(mpg ~ hp*wt, data = mtcars))
+```
+
+## Model Notation (Continued) 
+
+**Removing Predictors**
+
+Sometimes, you may want to remove a predictor from a model formula with "-"
+
+```{r, echo = TRUE}
+coef(lm(mpg ~ hp*wt - hp:wt, data = mtcars))
+```
+
+
+## Model Notation (Continued) 
+
+**Including all predictors with "."**
+
+```{r, echo = TRUE}
+coef(lm(mpg ~ ., data = mtcars))
+```
+
+*Note:* Previous operations still apply!
+```{r, echo = TRUE}
+coef(lm(mpg ~ . * ., data = mtcars))
+```
+
+## Model Notation (Continued) 
+
+**Inhibiting interpretation**
+
+If you want to create new variables that are multiplied or subtracted predictors, operations can be inhibited with "I()"
+
+```{r, echo = TRUE}
+coef(lm(mpg ~ I(hp * wt), data = mtcars))
+```
+
+## Model Notation (Continued) 
+
+**Exponential Terms**
+
+"I()" is important for polynomials. Exponential terms are assigned through "^". **However, without I() this operation will produce first-and second-order terms!**
+
+```{r, echo = TRUE}
+coef(lm(mpg ~ hp + I(hp^2), data = mtcars))
+```
+
+```{r, echo = TRUE}
+coef(lm(mpg ~ hp + hp^2, data = mtcars))
+```
+
+## Model Notation (Continued) 
+
+**"^" with multiple coefficients:**
+```{r, echo = TRUE}
+coef(lm(mpg ~ (hp + wt)^2, data = mtcars))
+```
+
+## Quiz!
+
+My data frame contains 5 variables: mpg, hp, wt, disp, drat
+
+```{r, size=15}
+cat("lm(mpg ~ hp*wt*disp*drat - hp:wt:disp:drat, data = mtcars)")
+```
+\br
+
+```{r, size=15}
+cat("lm(mpg ~ .*.*. , data = mtcars)")
+```
+
+\br
+```{r, size=15}
+cat("lm(mpg ~ (hp+wt+disp+drat)^3, data = mtcars)")
+```
+
+What coefficients do these different models produce?
+
+## Answer:
+
+<style type="text/css">
+code.r{ /* Code block */
+    font-size: 18px;
+}
+pre { /* Code block - determines code spacing between lines */
+    font-size: 18px;
+}
+</style>
+
+Trick question -- they're all the same!
+
+```{r, echo = TRUE}
+coef(lm(mpg ~ disp * hp * wt * drat - hp:wt:disp:drat, data = mtcars))
+```
+
+## Answer:
+
+Trick question -- they're all the same!
+
+```{r, echo = TRUE}
+coef(lm(mpg ~ .*.*. , data = mtcars))
+```
+
+## Answer:
+
+Trick question -- they're all the same!
+
+```{r, echo = TRUE}
+coef(lm(mpg ~ (disp + hp + wt + drat)^3, data = mtcars))
+```
+
+All first, second, and third order terms
+
+## A guide to your fitted model object
+
+**Fitting a new model**
+```{r, echo = TRUE}
+mymodel <- lm(mpg ~ disp, data = mtcars)
+```
+
+\br
+
+**What formula did I run?**
+
+```{r, echo = TRUE}
+mymodel$call
+```
+
+```{r, echo = TRUE}
+formula(mymodel)
+```
+## Your fitted model object (continued)
+
+**summary() provides a general overview of your model**
+
+```{r}
+summary(mymodel)
+```
+
+## Your fitted model object (continued)
+
+**anova() provides the sum-of-squares decomposition**
+
+```{r}
+anova(mymodel)
+```
+
+## Your fitted model object (continued)
+
+* Adding new predictors with "update"
+```{r}
+update(mymodel, formula = ~ . + hp)
+```
+
+* Changing responses 
+```{r}
+update(mymodel, formula = ~ . + hp)
+```
+
+
+
+```{r}
+iris$Species
+
+model.matrix(lm(Sepal.Length ~ Species, iris))
+```
+
